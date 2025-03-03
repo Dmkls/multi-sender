@@ -1,27 +1,26 @@
 import asyncio
 from web3 import AsyncWeb3
-from random import randint
+from random import randint, shuffle
 from config import *
 
 GAS_MULTIPLIER = 1.2
 w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(RPC))
 
 RECIPIENTS_FILE = open("recipients.txt")
-RECIPIENTS_LEN = len(RECIPIENTS_FILE.readline())
 RECIPIENTS = []
 
-wallets_type = "addresses"
-if RECIPIENTS_LEN > 50:
-    wallets_type = "private keys"
+for line in RECIPIENTS_FILE.readlines():
+    if line.strip():
+        line = line.strip()
 
-for line in RECIPIENTS_FILE:
-    if wallets_type == "private keys":
-        if line.strip():
-            recipient_address = w3.eth.account.from_key(PRIVATE_KEY).address
+        if line[:2] != '0x':
+            line = '0x' + line
+
+        if len(line) > 50:
+            recipient_address = w3.eth.account.from_key(line).address
             RECIPIENTS.append(recipient_address)
-    else:
-        RECIPIENTS = [line.strip() for line in RECIPIENTS_FILE if line.strip()]
-
+        else:
+            RECIPIENTS.append(line)
 
 async def send_eth():
     sender = w3.eth.account.from_key(PRIVATE_KEY)
@@ -32,8 +31,9 @@ async def send_eth():
 
     for recipient in RECIPIENTS:
         try:
-            amount_eth = randint(amount[0] * 10e18, amount[1] * 10e18) / 10e18
+            amount_eth = randint(int(amount[0] * 10e18), int(amount[1] * 10e18)) / 10e18
             amount_to_recipient = w3.to_wei(amount_eth, 'ether')
+
             tx = {
                 'chainId': chain_id,
                 'from': sender_address,
@@ -49,7 +49,7 @@ async def send_eth():
             # Отправка транзакции
             signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
             tx_hash = await w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            print(f"Отправлено {w3.from_wei(amount_to_recipient, 'ether')} ETH на {recipient} | TX: {tx_hash.hex()}")
+            print(f"Отправлено {amount_eth} ETH на {recipient} | TX: {tx_hash.hex()}")
 
             nonce += 1
             await asyncio.sleep(DELAY)
@@ -57,5 +57,8 @@ async def send_eth():
             print(f'Ошибка: {error} при отправки на кошелёк {recipient}')
             with open("failed.txt", 'a', encoding="utf-8") as f:
                 f.write(f'{recipient}\n')
+
+if DO_SHAFFLE:
+    shuffle(RECIPIENTS)
 
 asyncio.run(send_eth())
